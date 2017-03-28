@@ -86,6 +86,9 @@ void parseFileSystemInfo(uint8_t *bootSector, filesystem_info *fsInfo) {
     fsInfo->sectors_per_fat = bootSector[39] * 16777216 + bootSector[38] * 65536 + bootSector[37] * 256 + bootSector[36];
     fsInfo->reserved_sectors = bootSector[15] * 256 + bootSector[14];
     fsInfo->hidden_sectors = bootSector[31] * 16777216 + bootSector[30] * 65536 + bootSector[29] * 256 + bootSector[28];
+    fsInfo->fat_offset = fsInfo->reserved_sectors;
+    fsInfo->cluster_offset = fsInfo->fat_offset + fsInfo->sectors_per_fat * bootSector[16];
+    fsInfo->rootdir_offset = fsInfo->cluster_offset + ((bootSector[47] * 16777216 + bootSector[46] * 65536 + bootSector[45] * 256 + bootSector[44]) - 2) * fsInfo->cluster_size;
   } else {
     fsInfo->fs_type = FAT12;
     fsInfo->sector_size = bootSector[12] * 256 + bootSector[11];
@@ -94,5 +97,8 @@ void parseFileSystemInfo(uint8_t *bootSector, filesystem_info *fsInfo) {
     fsInfo->sectors_per_fat = bootSector[23] * 256 + bootSector[22];
     fsInfo->reserved_sectors = bootSector[15] * 256 + bootSector[14];
     fsInfo->hidden_sectors = bootSector[29] * 256 + bootSector[28];
+    fsInfo->fat_offset = fsInfo->reserved_sectors;
+    fsInfo->rootdir_offset = fsInfo->fat_offset + fsInfo->sectors_per_fat * bootSector[16];
+    fsInfo->cluster_offset = fsInfo->rootdir_offset + fsInfo->rootdir_size * 32 / fsInfo->sector_size;
   }
 }
