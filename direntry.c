@@ -10,15 +10,11 @@
 #include "direntry.h"
 
 void printDirectoryEntry(const struct DirectoryEntry *entry) {
-  if (entry->vfat || entry->deleted || entry->volumnLabel) {
-    return;
-  }
-
   if (entry->size == 0) {
     // directory
-    printf("DIR     %13d %11d  %-s\n", entry->startCluster, entry->size, entry->name);
+    printf("DIR     %13d %11d  %-s -> %s\n", entry->startCluster, entry->size, entry->name, entry->clusterChain);
   } else {
     // file
-    printf("FILE    %13d %11d  %-s.%-s\n", entry->startCluster, entry->size, entry->name, entry->extension);
+    printf("FILE    %13d %11d  %-s.%-s -> %s\n", entry->startCluster, entry->size, entry->name, entry->extension, entry->clusterChain);
   }
 }

@@ -13,9 +13,7 @@ struct DirectoryEntry {
   int size;
   char *name;
   char *extension;
-  int vfat;
-  int deleted;
-  int volumnLabel;
+  char *clusterChain;
 };
 
 void printDirectoryEntry(const struct DirectoryEntry *);
