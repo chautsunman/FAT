@@ -5,11 +5,16 @@
 #include <stdio.h>
 #include <stddef.h>
 #include <math.h>
+#include <string.h>
 #include "directory.h"
 #include "disk.h"
+#include "direntry.h"
 
 
 void parseFileSystemInfo(uint8_t *, filesystem_info *);
+void printDirectoryTree(unsigned int, unsigned int);
+
+int getBit(uint8_t, int);
 
 
 /*
@@ -70,8 +75,14 @@ int main(int argc, char *argv[]) {
 
   print_filesystem_info(&fsInfo);
 
+  setSectorSize(fsInfo.sector_size);
+
 
   // Add calls to function to print the directory tree
+  printf("\n\n");
+  printf("Type    Start Cluster        Size  Name  -> Cluster Chain\n");
+  printf("=================================================================\n");
+  printDirectoryTree(fsInfo.rootdir_offset, getSectorSize());
 
   return 0;
 }
@@ -101,4 +112,40 @@ void parseFileSystemInfo(uint8_t *bootSector, filesystem_info *fsInfo) {
     fsInfo->rootdir_offset = fsInfo->fat_offset + fsInfo->sectors_per_fat * bootSector[16];
     fsInfo->cluster_offset = fsInfo->rootdir_offset + fsInfo->rootdir_size * 32 / fsInfo->sector_size;
   }
+}
+
+
+void printDirectoryTree(unsigned int dirSector, unsigned int sectorSize) {
+  unsigned int numberOfEntries = sectorSize / 32;
+  uint8_t buf[sectorSize];
+
+  if (readSectors(dirSector, 1, buf) != sectorSize) {
+    exit(1);
+  }
+
+  int i = 0;
+  while (buf[i*32] != 0 && i != numberOfEntries) {
+    struct DirectoryEntry entry;
+
+    entry.startCluster = buf[i*32+27] * 256 + buf[i*32+26];
+    entry.size = buf[i*32+31] * 16777216 + buf[i*32+30] * 65536 + buf[i*32+29] * 256 + buf[i*32+28];
+    entry.name = malloc(9);
+    entry.extension = malloc(4);
+    memcpy(entry.name, buf+i*32, 8);
+    memcpy(entry.extension, buf+i*32+8, 3);
+    entry.name[8] = 0;
+    entry.extension[3] = 0;
+    entry.vfat = (buf[i*32+11] == 0x0F);
+    entry.deleted = (buf[i*32] == 0xE5);
+    entry.volumnLabel = (buf[i*32+11] == 0x28);
+
+    printDirectoryEntry(&entry);
+
+    i++;
+  }
+}
+
+
+int getBit(uint8_t byte, int i) {
+  return (byte >> (7-i)) & 1;
 }

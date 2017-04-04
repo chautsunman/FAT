@@ -7,6 +7,17 @@
 #ifndef DIRENTRY_H
 #define DIRENTRY_H
 
-// Add stuff pertaining to the manipulation of an individual directory entry here 
+// Add stuff pertaining to the manipulation of an individual directory entry here
+struct DirectoryEntry {
+  int startCluster;
+  int size;
+  char *name;
+  char *extension;
+  int vfat;
+  int deleted;
+  int volumnLabel;
+};
+
+void printDirectoryEntry(const struct DirectoryEntry *);
 
 #endif
