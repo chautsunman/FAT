@@ -147,6 +147,8 @@ void printDirectoryTree(uint8_t *fat, unsigned int dirSector, unsigned int secto
     memcpy(entry.extension, buf+i*32+8, 3);
     entry.name[8] = 0;
     entry.extension[3] = 0;
+    trimString(entry.name);
+    trimString(entry.extension);
 
     entry.clusterChain = getClusterChain(fat, entry.startCluster, fsType);
 

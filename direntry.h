@@ -18,4 +18,6 @@ struct DirectoryEntry {
 
 void printDirectoryEntry(const struct DirectoryEntry *);
 
+void trimString(char *);
+
 #endif

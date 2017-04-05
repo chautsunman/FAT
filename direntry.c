@@ -18,3 +18,26 @@ void printDirectoryEntry(const struct DirectoryEntry *entry) {
     printf("FILE    %13d %11d  %-s.%-s -> %s\n", entry->startCluster, entry->size, entry->name, entry->extension, entry->clusterChain);
   }
 }
+
+void trimString(char *str) {
+  char *c;
+
+  for (c = str; *c != 0; c++) {
+    if (*c == 32) {
+      char *d;
+      int end = 1;
+
+      for (d = c; *d != 0; d++) {
+        if (*d != 32) {
+          end = 0;
+          break;
+        }
+      }
+
+      if (end) {
+        *c = 0;
+        return;
+      }
+    }
+  }
+}
