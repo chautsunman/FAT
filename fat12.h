@@ -8,8 +8,10 @@
 
 #include <stdint.h>
 
-int lastClusterFat12(uint8_t *, int);
+// checks if the cluster is the last cluster
+int lastClusterFat12(const uint8_t *fat, const int cluster);
 
-int nextClusterFat12(uint8_t *, int);
+// returns the next cluster
+int nextClusterFat12(const uint8_t *fat, const int cluster);
 
 #endif

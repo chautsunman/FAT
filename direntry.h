@@ -16,8 +16,9 @@ struct DirectoryEntry {
   char *clusterChain;
 };
 
-void printDirectoryEntry(const struct DirectoryEntry *);
+void printDirectoryEntry(const struct DirectoryEntry *entry, const char *parentPath);
 
-void trimString(char *);
+// trims the trailing spaces of a string
+void trimString(char *str);
 
 #endif

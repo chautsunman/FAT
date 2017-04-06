@@ -11,10 +11,16 @@
 #include "direntry.h"
 
 
-void parseFileSystemInfo(uint8_t *, filesystem_info *);
-void printDirectoryTree(uint8_t *, unsigned int, unsigned int, FS_TYPE);
+void parseFileSystemInfo(uint8_t *bootSector, filesystem_info *fsInfo);
+void printDirectoryTree(
+    const uint8_t *fat,
+    const unsigned int dirSector, const unsigned int dirSectorSize,
+    const unsigned int sectorSize, const unsigned int clusterSize,
+    const unsigned int clusterOffset,
+    const char *parentPath, const FS_TYPE fsType,
+    const int rootDir);
 
-int getBit(uint8_t, int);
+int getBit(uint8_t byte, int i);
 
 
 /*
@@ -89,7 +95,13 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
-  printDirectoryTree(fat, fsInfo.rootdir_offset, getSectorSize(), fsInfo.fs_type);
+  printDirectoryTree(
+      fat,
+      fsInfo.rootdir_offset, 32 * fsInfo.rootdir_size / getSectorSize(),
+      getSectorSize(), fsInfo.cluster_size,
+      fsInfo.cluster_offset,
+      "", fsInfo.fs_type,
+      (fsInfo.fs_type != FAT32));
 
   return 0;
 }
@@ -122,40 +134,99 @@ void parseFileSystemInfo(uint8_t *bootSector, filesystem_info *fsInfo) {
 }
 
 
-void printDirectoryTree(uint8_t *fat, unsigned int dirSector, unsigned int sectorSize, FS_TYPE fsType) {
-  unsigned int numberOfEntries = sectorSize / 32;
-  uint8_t buf[sectorSize];
+void printDirectoryTree(
+    const uint8_t *fat,
+    const unsigned int dirSector, const unsigned int dirSectorSize,
+    const unsigned int sectorSize, const unsigned int clusterSize,
+    const unsigned int clusterOffset,
+    const char *parentPath, const FS_TYPE fsType,
+    const int rootDir) {
+  // printf("dirSector = %d, dirSectorSize = %d, sectorSize = %d, clusterSize = %d, clusterOffset = %d, parentPath = %s\n", dirSector, dirSectorSize, sectorSize, clusterSize, clusterOffset, parentPath);
 
-  if (readSectors(dirSector, 1, buf) != sectorSize) {
-    exit(1);
+  int currentSector = dirSector;
+  int sectorsToRead = (dirSectorSize != 0) ? dirSectorSize : clusterSize;
+  int currentCluster = ((currentSector - clusterOffset) / clusterSize) + 2;
+  int nextCluster = currentCluster;
+  int nextSector = currentSector;
+
+  unsigned int numberOfEntries = sectorsToRead * sectorSize / 32;
+  uint8_t buf[sectorSize * sectorsToRead];
+
+  // set functions to check if the last cluster and get the next cluster
+  int (*lastClusterFunc)(const uint8_t *, const int) = lastClusterFat32;
+  int (*nextClusterFunc)(const uint8_t *, const int) = nextClusterFat32;
+  if (fsType == FAT12) {
+    lastClusterFunc = lastClusterFat12;
+    nextClusterFunc = nextClusterFat12;
   }
 
-  int i = 0;
-  while (buf[i*32] != 0 && i != numberOfEntries) {
-    if (buf[i*32+11] == 0x0F || buf[i*32] == 0xE5 || buf[i*32+11] == 0x28) {
-      i++;
-      continue;
+  // read clusters
+  do {
+    currentCluster = nextCluster;
+    currentSector = nextSector;
+    // printf("currentCluster = %d, currentSector = %d, sectorsToRead = %d\n", currentCluster, currentSector, sectorsToRead);
+
+    // read sectors, number of sectors per fat (clusterSize) except root directory
+    if (readSectors(currentSector, sectorsToRead, buf) != (sectorSize * sectorsToRead)) {
+      exit(1);
     }
 
-    struct DirectoryEntry entry;
+    int i = 0;
+    // read directory entries until the end of the directory or the end of the cluster
+    while (buf[i*32] != 0 && i != numberOfEntries) {
+      // skip long directory names, deleted entries, volumn labels, and current and parent entries
+      if (buf[i*32+11] == 0x0F || buf[i*32] == 0xE5 || buf[i*32+11] == 0x28 || buf[i*32] == 0x2E) {
+        i++;
+        continue;
+      }
 
-    entry.startCluster = buf[i*32+27] * 256 + buf[i*32+26];
-    entry.size = buf[i*32+31] * 16777216 + buf[i*32+30] * 65536 + buf[i*32+29] * 256 + buf[i*32+28];
-    entry.name = malloc(9);
-    entry.extension = malloc(4);
-    memcpy(entry.name, buf+i*32, 8);
-    memcpy(entry.extension, buf+i*32+8, 3);
-    entry.name[8] = 0;
-    entry.extension[3] = 0;
-    trimString(entry.name);
-    trimString(entry.extension);
+      struct DirectoryEntry entry;
 
-    entry.clusterChain = getClusterChain(fat, entry.startCluster, fsType);
+      // parse the directory entry
+      entry.startCluster = buf[i*32+27] * 256 + buf[i*32+26];
+      entry.size = buf[i*32+31] * 16777216 + buf[i*32+30] * 65536 + buf[i*32+29] * 256 + buf[i*32+28];
+      entry.name = malloc(9);
+      entry.extension = malloc(4);
+      memcpy(entry.name, buf+i*32, 8);
+      memcpy(entry.extension, buf+i*32+8, 3);
+      entry.name[8] = 0;
+      entry.extension[3] = 0;
+      trimString(entry.name);
+      trimString(entry.extension);
 
-    printDirectoryEntry(&entry);
+      // get the cluster chain
+      entry.clusterChain = getClusterChain(fat, entry.startCluster, fsType);
 
-    i++;
-  }
+      // print the directory entry
+      printDirectoryEntry(&entry, parentPath);
+
+      // print the sub-directories recursively with depth-first search
+      if (entry.size == 0) {
+        // parse the new parent path
+        char newParentPath[strlen(parentPath)+strlen(entry.name)+1+1];
+        strcpy(newParentPath, parentPath);
+        strcat(newParentPath, entry.name);
+        strcat(newParentPath, "/");
+
+        // print the sub-directories recursively
+        printDirectoryTree(
+            fat,
+            (entry.startCluster - 2) * clusterSize + clusterOffset, clusterSize,
+            sectorSize, clusterSize,
+            clusterOffset,
+            newParentPath, fsType,
+            0);
+      }
+
+      i++;
+    }
+
+    // get the next cluster
+    if (!rootDir) {
+      nextCluster = nextClusterFunc(fat, currentCluster);
+      nextSector = (nextCluster - 2) * clusterSize + clusterOffset;
+    }
+  } while (!rootDir && !lastClusterFunc(fat, currentCluster));
 }
 
 
